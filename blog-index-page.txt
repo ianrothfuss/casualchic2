@@ -1,0 +1,62 @@
+// Blog Index Page for Casual Chic Boutique 2.0
+
+// storefront/src/pages/blog/index.js
+import React, { useState } from 'react';
+import { useRouter } from 'next/router';
+import Link from 'next/link';
+import { useBlogPosts } from '../../hooks/useBlogPosts';
+import { useBlogCategories } from '../../hooks/useBlogCategories';
+import Layout from '../../components/Layout';
+import BlogPost from '../../components/BlogPost';
+import Breadcrumbs from '../../components/Breadcrumbs';
+import Pagination from '../../components/Pagination';
+import Loader from '../../components/Loader';
+import Error from '../../components/Error';
+import NewsletterSignup from '../../components/NewsletterSignup';
+
+const BlogIndexPage = () => {
+  const router = useRouter();
+  const { 
+    query: { category, tag, page = 1 }
+  } = router;
+  
+  const pageSize = 9;
+  const pageNumber = parseInt(page, 10);
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Get blog posts
+  const { 
+    posts, 
+    isLoading, 
+    error, 
+    totalCount, 
+    totalPages 
+  } = useBlogPosts({
+    category,
+    tag,
+    page: pageNumber,
+    limit: pageSize,
+    search: searchQuery
+  });
+  
+  // Get blog categories
+  const { categories, isLoading: categoriesLoading } = useBlogCategories();
+  
+  // Get featured posts
+  const { posts: featuredPosts } = useBlogPosts({
+    featured: true,
+    limit: 3
+  });
+  
+  // Handle search submission
+  const handleSearch = (e) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      router.push(`/blog?search=${encodeURIComponent(searchQuery.trim())}`);
+    }
+  };
+  
+  // Get page title
+  const getPageTitle = () => {
+    if (category) {
+      const categoryName = categories?.find(c => c.slug === category)?.name

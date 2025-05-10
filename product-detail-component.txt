@@ -1,0 +1,594 @@
+// Product Detail Page Component for Casual Chic Boutique 2.0
+
+// storefront/src/pages/products/[handle].js
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
+import { useProduct } from '../../hooks/useProduct';
+import { useRelatedProducts } from '../../hooks/useRelatedProducts';
+import { useCart } from '../../hooks/useCart';
+import { useAuth } from '../../hooks/useAuth';
+import { useSizeRecommendation } from '../../hooks/useSizeRecommendation';
+import { useOutfits } from '../../hooks/useOutfits';
+import Layout from '../../components/Layout';
+import ProductGallery from '../../components/ProductGallery';
+import SizeGuide from '../../components/SizeGuide';
+import VirtualTryOn from '../../components/VirtualTryOn';
+import SizeRecommendation from '../../components/SizeRecommendation';
+import OutfitSuggestions from '../../components/OutfitSuggestions';
+import ProductReviews from '../../components/ProductReviews';
+import RelatedProducts from '../../components/RelatedProducts';
+import Breadcrumbs from '../../components/Breadcrumbs';
+import Loader from '../../components/Loader';
+import Error from '../../components/Error';
+
+const ProductDetailPage = () => {
+  const router = useRouter();
+  const { handle } = router.query;
+  const { product, isLoading: productLoading, error: productError } = useProduct(handle);
+  const { user } = useAuth();
+  const { addItem, isLoading: cartLoading } = useCart();
+  const [selectedVariant, setSelectedVariant] = useState(null);
+  const [selectedOptions, setSelectedOptions] = useState({});
+  const [quantity, setQuantity] = useState(1);
+  const [activeTab, setActiveTab] = useState('details');
+  const [addToCartError, setAddToCartError] = useState(null);
+  const [addedToCart, setAddedToCart] = useState(false);
+  
+  // Size recommendation
+  const { recommendation, getRecommendation } = useSizeRecommendation();
+  const [showSizeRecommendation, setShowSizeRecommendation] = useState(false);
+  
+  // Related products
+  const { products: relatedProducts, isLoading: relatedLoading } = useRelatedProducts(
+    product?.id, 
+    product?.categories?.[0]?.id,
+    4
+  );
+  
+  // Outfit suggestions
+  const { outfits, createOutfit } = useOutfits();
+  const [outfitSuggestions, setOutfitSuggestions] = useState([]);
+  
+  // Reset selected options and variant when product changes
+  useEffect(() => {
+    if (product) {
+      // Initialize selected options with defaults
+      const defaultOptions = {};
+      
+      if (product.options && product.options.length > 0) {
+        product.options.forEach(option => {
+          if (option.values && option.values.length > 0) {
+            defaultOptions[option.id] = option.values[0].value;
+          }
+        });
+      }
+      
+      setSelectedOptions(defaultOptions);
+      
+      // Find default variant
+      if (product.variants && product.variants.length > 0) {
+        setSelectedVariant(product.variants[0]);
+      }
+      
+      // Reset other state
+      setQuantity(1);
+      setAddToCartError(null);
+      setAddedToCart(false);
+      
+      // Reset active tab
+      setActiveTab('details');
+    }
+  }, [product]);
+  
+  // Find matching variant when options change
+  useEffect(() => {
+    if (product && product.variants) {
+      const matchingVariant = findMatchingVariant(product.variants, selectedOptions);
+      setSelectedVariant(matchingVariant || null);
+    }
+  }, [product, selectedOptions]);
+  
+  // Load outfit suggestions when product changes
+  useEffect(() => {
+    if (product) {
+      fetchOutfitSuggestions();
+    }
+  }, [product]);
+  
+  // Helper to find matching variant based on selected options
+  const findMatchingVariant = (variants, options) => {
+    return variants.find(variant => {
+      // Check if all selected options match this variant
+      if (!variant.options) return false;
+      
+      return Object.entries(options).every(([optionId, value]) => {
+        const variantOption = variant.options.find(opt => opt.option_id === optionId);
+        return variantOption && variantOption.value === value;
+      });
+    });
+  };
+  
+  // Fetch outfit suggestions for this product
+  const fetchOutfitSuggestions = async () => {
+    try {
+      // Here we would normally call an API endpoint to get outfit suggestions
+      // For now, we'll just simulate it with some related products
+      if (relatedProducts && relatedProducts.length > 0) {
+        const suggestions = [
+          {
+            id: 'suggestion-1',
+            name: 'Casual Weekend Look',
+            products: [product, ...relatedProducts.slice(0, 2)]
+          },
+          {
+            id: 'suggestion-2',
+            name: 'Evening Out Ensemble',
+            products: [product, ...relatedProducts.slice(1, 3)]
+          }
+        ];
+        
+        setOutfitSuggestions(suggestions);
+      }
+    } catch (error) {
+      console.error('Error fetching outfit suggestions:', error);
+    }
+  };
+  
+  // Handle option change
+  const handleOptionChange = (optionId, value) => {
+    setSelectedOptions(prev => ({
+      ...prev,
+      [optionId]: value
+    }));
+  };
+  
+  // Handle quantity change
+  const handleQuantityChange = (e) => {
+    const value = parseInt(e.target.value);
+    if (!isNaN(value) && value > 0) {
+      setQuantity(value);
+    }
+  };
+  
+  // Increment quantity
+  const incrementQuantity = () => {
+    setQuantity(prev => prev + 1);
+  };
+  
+  // Decrement quantity
+  const decrementQuantity = () => {
+    setQuantity(prev => (prev > 1 ? prev - 1 : 1));
+  };
+  
+  // Add to cart
+  const handleAddToCart = async () => {
+    setAddToCartError(null);
+    setAddedToCart(false);
+    
+    if (!selectedVariant) {
+      setAddToCartError('Please select all options');
+      return;
+    }
+    
+    try {
+      await addItem(selectedVariant.id, quantity);
+      setAddedToCart(true);
+      
+      // Reset notification after a few seconds
+      setTimeout(() => {
+        setAddedToCart(false);
+      }, 3000);
+    } catch (error) {
+      setAddToCartError(error.message || 'Error adding item to cart');
+    }
+  };
+  
+  // Get size recommendation
+  const handleGetSizeRecommendation = async (measurements) => {
+    if (!product) return;
+    
+    try {
+      await getRecommendation(product.id, measurements);
+      setShowSizeRecommendation(true);
+    } catch (error) {
+      console.error('Error getting size recommendation:', error);
+    }
+  };
+  
+  // Save outfit
+  const handleSaveOutfit = async (outfitData) => {
+    try {
+      await createOutfit({
+        ...outfitData,
+        products: [...outfitData.products.map(p => ({ id: p.id }))]
+      });
+      
+      // Show success notification or redirect
+    } catch (error) {
+      console.error('Error saving outfit:', error);
+    }
+  };
+  
+  // Loading state
+  if (productLoading) {
+    return (
+      <Layout>
+        <div className="container py-8">
+          <Loader />
+        </div>
+      </Layout>
+    );
+  }
+  
+  // Error state
+  if (productError || !product) {
+    return (
+      <Layout>
+        <div className="container py-8">
+          <Error message="Product not found" />
+          <div className="mt-6">
+            <button 
+              className="btn btn-primary"
+              onClick={() => router.push('/products')}
+            >
+              Browse Products
+            </button>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+  
+  // Get product price
+  const getProductPrice = () => {
+    if (selectedVariant && selectedVariant.prices && selectedVariant.prices.length > 0) {
+      const price = selectedVariant.prices[0].amount;
+      return (price / 100).toFixed(2); // Convert cents to dollars
+    }
+    
+    return 'N/A';
+  };
+  
+  // Get product inventory status
+  const getInventoryStatus = () => {
+    if (!selectedVariant) return { status: 'unavailable', text: 'Unavailable' };
+    
+    const inventory = selectedVariant.inventory_quantity || 0;
+    
+    if (inventory <= 0) {
+      return { status: 'out-of-stock', text: 'Out of Stock' };
+    } else if (inventory < 10) {
+      return { status: 'low-stock', text: `Low Stock (${inventory} left)` };
+    } else {
+      return { status: 'in-stock', text: 'In Stock' };
+    }
+  };
+  
+  const inventoryStatus = getInventoryStatus();
+  
+  return (
+    <Layout title={`${product.title} - Casual Chic Boutique`}>
+      <div className="container py-8">
+        {/* Breadcrumbs */}
+        <Breadcrumbs 
+          items={[
+            { label: 'Home', href: '/' },
+            { label: 'Products', href: '/products' },
+            { label: product.title, href: null }
+          ]}
+          className="mb-6"
+        />
+        
+        <div className="product-content grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+          {/* Product Gallery */}
+          <div className="product-gallery-container">
+            <ProductGallery 
+              images={product.images} 
+              title={product.title} 
+            />
+          </div>
+          
+          {/* Product Details */}
+          <div className="product-details-container">
+            <div className="product-details p-6 rounded-lg shadow">
+              <h1 className="product-details-title mb-2">{product.title}</h1>
+              
+              {/* Product Price */}
+              <div className="product-details-price mb-4">
+                ${getProductPrice()}
+              </div>
+              
+              {/* Inventory Status */}
+              <div className={`inventory-status mb-4 ${inventoryStatus.status}`}>
+                {inventoryStatus.text}
+              </div>
+              
+              {/* Product Description */}
+              <div 
+                className="product-details-description mb-6"
+                dangerouslySetInnerHTML={{ __html: product.description }}
+              />
+              
+              {/* Product Options */}
+              {product.options && product.options.length > 0 && (
+                <div className="product-options mb-6">
+                  {product.options.map(option => (
+                    <div key={option.id} className="product-option mb-4">
+                      <label className="product-option-label mb-2">
+                        {option.title}
+                      </label>
+                      
+                      <div className="product-option-values">
+                        {option.values.map(value => (
+                          <button
+                            key={value.id}
+                            className={`product-option-value ${
+                              selectedOptions[option.id] === value.value ? 'selected' : ''
+                            }`}
+                            onClick={() => handleOptionChange(option.id, value.value)}
+                          >
+                            {value.value}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {/* Size Recommendation Button */}
+              {product.metadata?.product_type && ['tops', 'bottoms', 'dresses'].includes(product.metadata.product_type) && (
+                <button 
+                  className="btn btn-secondary mb-6"
+                  onClick={() => setShowSizeRecommendation(true)}
+                >
+                  Get Size Recommendation
+                </button>
+              )}
+              
+              {/* Quantity Selector */}
+              <div className="product-quantity mb-6">
+                <label className="product-option-label mb-2">
+                  Quantity
+                </label>
+                
+                <div className="quantity-input">
+                  <button 
+                    className="quantity-btn"
+                    onClick={decrementQuantity}
+                    disabled={quantity <= 1}
+                  >
+                    -
+                  </button>
+                  
+                  <input 
+                    type="number" 
+                    min="1" 
+                    value={quantity} 
+                    onChange={handleQuantityChange}
+                  />
+                  
+                  <button 
+                    className="quantity-btn"
+                    onClick={incrementQuantity}
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+              
+              {/* Add to Cart Button */}
+              <div className="product-actions">
+                <button 
+                  className="btn btn-primary w-full"
+                  onClick={handleAddToCart}
+                  disabled={cartLoading || inventoryStatus.status === 'out-of-stock'}
+                >
+                  {cartLoading ? 'Adding...' : 'Add to Cart'}
+                </button>
+              </div>
+              
+              {/* Error or Success Message */}
+              {addToCartError && (
+                <div className="text-error mt-4">
+                  {addToCartError}
+                </div>
+              )}
+              
+              {addedToCart && (
+                <div className="text-success mt-4">
+                  Added to cart successfully!
+                </div>
+              )}
+              
+              {/* Product Meta */}
+              <div className="product-meta mt-6">
+                {product.tags && product.tags.length > 0 && (
+                  <div className="product-tags">
+                    <span className="font-medium">Tags: </span>
+                    {product.tags.map((tag, index) => (
+                      <span key={tag.id}>
+                        {tag.value}
+                        {index < product.tags.length - 1 ? ', ' : ''}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                
+                {product.categories && product.categories.length > 0 && (
+                  <div className="product-categories mt-2">
+                    <span className="font-medium">Categories: </span>
+                    {product.categories.map((category, index) => (
+                      <span key={category.id}>
+                        <a href={`/categories/${category.handle}`}>{category.name}</a>
+                        {index < product.categories.length - 1 ? ', ' : ''}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {/* Product Tabs */}
+        <div className="product-tabs mb-12">
+          <div className="tabs-header">
+            <button 
+              className={`tab ${activeTab === 'details' ? 'active' : ''}`}
+              onClick={() => setActiveTab('details')}
+            >
+              Details
+            </button>
+            <button 
+              className={`tab ${activeTab === 'size' ? 'active' : ''}`}
+              onClick={() => setActiveTab('size')}
+            >
+              Size & Fit
+            </button>
+            <button 
+              className={`tab ${activeTab === 'try-on' ? 'active' : ''}`}
+              onClick={() => setActiveTab('try-on')}
+            >
+              Virtual Try-On
+            </button>
+            <button 
+              className={`tab ${activeTab === 'outfits' ? 'active' : ''}`}
+              onClick={() => setActiveTab('outfits')}
+            >
+              Complete the Look
+            </button>
+            <button 
+              className={`tab ${activeTab === 'reviews' ? 'active' : ''}`}
+              onClick={() => setActiveTab('reviews')}
+            >
+              Reviews
+            </button>
+          </div>
+          
+          <div className="tab-content p-6">
+            {activeTab === 'details' && (
+              <div>
+                <h3 className="text-2xl mb-4">Product Details</h3>
+                
+                <div 
+                  className="mb-6"
+                  dangerouslySetInnerHTML={{ __html: product.description }}
+                />
+                
+                {/* Additional product details */}
+                {product.metadata?.fabric_composition && (
+                  <div className="mb-4">
+                    <h4 className="text-xl mb-2">Fabric</h4>
+                    <p>{product.metadata.fabric_composition}</p>
+                  </div>
+                )}
+                
+                {product.metadata?.care_instructions && (
+                  <div className="mb-4">
+                    <h4 className="text-xl mb-2">Care</h4>
+                    <p>{product.metadata.care_instructions}</p>
+                  </div>
+                )}
+                
+                {/* Sustainability rating */}
+                {product.metadata?.sustainability_rating && (
+                  <div className="mb-4">
+                    <h4 className="text-xl mb-2">Sustainability</h4>
+                    <div className="sustainability-rating">
+                      {Array.from({ length: 5 }).map((_, index) => (
+                        <span 
+                          key={index}
+                          className={`rating-star ${index < product.metadata.sustainability_rating ? 'active' : ''}`}
+                        >
+                          ★
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {activeTab === 'size' && (
+              <div>
+                <h3 className="text-2xl mb-4">Size & Fit</h3>
+                
+                {product.metadata?.fit_type && (
+                  <p className="mb-4">
+                    This {product.title} is designed with a {product.metadata.fit_type} fit.
+                  </p>
+                )}
+                
+                {/* Size Guide */}
+                <SizeGuide 
+                  productType={product.metadata?.product_type || 'general'}
+                  className="mb-6"
+                />
+                
+                {/* Size Recommendation Tool */}
+                <SizeRecommendation 
+                  product={product}
+                  onGetRecommendation={handleGetSizeRecommendation}
+                  recommendation={recommendation}
+                  show={showSizeRecommendation}
+                  onClose={() => setShowSizeRecommendation(false)}
+                />
+              </div>
+            )}
+            
+            {activeTab === 'try-on' && (
+              <div>
+                <h3 className="text-2xl mb-4">Virtual Try-On</h3>
+                
+                <p className="mb-6">
+                  See how this {product.title} looks on you with our virtual try-on feature.
+                </p>
+                
+                <VirtualTryOn product={product} />
+              </div>
+            )}
+            
+            {activeTab === 'outfits' && (
+              <div>
+                <h3 className="text-2xl mb-4">Complete the Look</h3>
+                
+                <p className="mb-6">
+                  Style this {product.title} with these suggested items for a complete outfit.
+                </p>
+                
+                <OutfitSuggestions 
+                  product={product}
+                  suggestions={outfitSuggestions}
+                  onSaveOutfit={handleSaveOutfit}
+                />
+              </div>
+            )}
+            
+            {activeTab === 'reviews' && (
+              <div>
+                <h3 className="text-2xl mb-4">Customer Reviews</h3>
+                
+                <ProductReviews productId={product.id} />
+              </div>
+            )}
+          </div>
+        </div>
+        
+        {/* Related Products */}
+        <div className="related-products">
+          <h2 className="text-3xl mb-6">You May Also Like</h2>
+          
+          <RelatedProducts 
+            products={relatedProducts}
+            isLoading={relatedLoading}
+          />
+        </div>
+      </div>
+    </Layout>
+  );
+};
+
+export default ProductDetailPage;
+
+  

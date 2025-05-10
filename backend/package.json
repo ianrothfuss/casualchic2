@@ -1,0 +1,21 @@
+{
+  "name": "casual-chic-backend",
+  "version": "0.1.0",
+  "description": "Casual Chic Boutique 2.0 Backend",
+  "main": "index.js",
+  "scripts": {
+    "build": "medusa-dev build",
+    "start": "medusa develop",
+    "seed": "medusa seed -f ./data/seed.json",
+    "migrations": "medusa migrations run"
+  },
+  "dependencies": {
+    "@medusajs/medusa": "^1.7.0",
+    "medusa-file-s3": "^1.0.0",
+    "medusa-plugin-sendgrid": "^1.0.0",
+    "typeorm": "^0.2.41"
+  },
+  "devDependencies": {
+    "medusa-dev-cli": "^1.0.0"
+  }
+}

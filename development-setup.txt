@@ -1,0 +1,400 @@
+# Casual Chic Boutique 2.0 Development Environment Setup
+
+This guide will help you set up the development environment for the Casual Chic Boutique 2.0 framework based on Medusa.js.
+
+## Prerequisites
+
+- Node.js (v16.x or higher)
+- npm (v8.x or higher) or yarn (v1.22.x or higher)
+- PostgreSQL (v14.x or higher)
+- Redis (v6.x or higher)
+- Git
+
+## Project Structure
+
+The project is organized into two main directories:
+
+1. `backend` - The Medusa.js backend
+2. `storefront` - The Next.js frontend
+
+```
+casual-chic-boutique/
+├── backend/               # Medusa backend
+│   ├── src/
+│   │   ├── api/           # Custom API endpoints
+│   │   ├── services/      # Custom business logic
+│   │   ├── models/        # Data models
+│   │   ├── migrations/    # Database migrations
+│   │   └── subscribers/   # Event handlers
+│   └── medusa-config.js   # Medusa configuration
+├── storefront/            # Frontend application
+│   ├── src/
+│   │   ├── components/    # UI components
+│   │   ├── pages/         # Page templates
+│   │   ├── hooks/         # Custom React hooks
+│   │   ├── services/      # API client services
+│   │   └── styles/        # Styling
+│   └── next.config.js     # Next.js configuration
+└── package.json           # Root package.json for development commands
+```
+
+## Backend Setup
+
+### 1. Create a new Medusa project
+
+```bash
+# Navigate to your workspace directory
+cd path/to/workspace
+
+# Create a new directory for the project
+mkdir casual-chic-boutique
+cd casual-chic-boutique
+
+# Initialize a new Medusa backend
+npx create-medusa-app@latest --skip-db-setup
+
+# Choose "Skip" for the frontend
+# Choose "PostgreSQL" for the database
+# Skip installation of sample data if asked
+```
+
+### 2. Configure the backend
+
+Navigate to the backend directory and install additional dependencies:
+
+```bash
+cd backend
+
+# Install additional packages
+npm install --save medusa-file-s3 medusa-plugin-sendgrid multer @medusajs/medusa-cli
+```
+
+### 3. Set up the environment variables
+
+Create a `.env` file in the backend directory:
+
+```bash
+touch .env
+```
+
+Add the following environment variables to the `.env` file:
+
+```
+PORT=9000
+DATABASE_URL=postgres://<username>:<password>@localhost:5432/casual_chic_boutique
+REDIS_URL=redis://localhost:6379
+JWT_SECRET=your_jwt_secret_here
+COOKIE_SECRET=your_cookie_secret_here
+STORE_CORS=http://localhost:8000,http://localhost:3000
+ADMIN_CORS=http://localhost:7000
+
+# S3 Configuration (for file storage)
+S3_URL=https://your-bucket-name.s3.amazonaws.com
+S3_BUCKET=your-bucket-name
+S3_REGION=your-region
+S3_ACCESS_KEY_ID=your_access_key_id
+S3_SECRET_ACCESS_KEY=your_secret_access_key
+
+# SendGrid Configuration (for emails)
+SENDGRID_API_KEY=your_sendgrid_api_key
+SENDGRID_FROM=your_from_email@example.com
+SENDGRID_ORDER_PLACED_ID=your_template_id
+```
+
+Replace the placeholder values with your actual credentials.
+
+### 4. Set up the database
+
+Create a new PostgreSQL database for the project:
+
+```bash
+psql -U postgres
+```
+
+In the psql shell:
+
+```sql
+CREATE DATABASE casual_chic_boutique;
+\q
+```
+
+### 5. Initialize the Medusa backend
+
+```bash
+# Migrate the database
+npm run build
+medusa migrations run
+
+# Seed the database (optional)
+medusa seed --seed-file=./data/seed.json
+
+# Start the development server
+npm run start
+```
+
+## Frontend Setup
+
+### 1. Set up the Next.js storefront
+
+```bash
+# Navigate to the project root
+cd ..
+
+# Create a new Next.js app for the storefront
+npx create-next-app@latest storefront
+
+# Navigate to the storefront directory
+cd storefront
+```
+
+### 2. Install dependencies
+
+```bash
+# Install required packages
+npm install axios react-query react-hook-form @hookform/resolvers yup react-dnd react-dnd-html5-backend react-dropzone @medusajs/medusa-js
+```
+
+### 3. Set up environment variables
+
+Create a `.env.local` file in the storefront directory:
+
+```bash
+touch .env.local
+```
+
+Add the following environment variables to the `.env.local` file:
+
+```
+NEXT_PUBLIC_MEDUSA_BACKEND_URL=http://localhost:9000
+```
+
+### 4. Create the folder structure
+
+```bash
+# Create necessary directories
+mkdir -p src/components src/pages src/hooks src/services src/styles src/utils
+```
+
+### 5. Set up the API client
+
+Create a new file `src/services/api.js`:
+
+```javascript
+// src/services/api.js
+import axios from 'axios';
+
+const API_URL = process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL;
+
+export const medusaClient = axios.create({
+  baseURL: API_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Add your API methods here
+// ...
+```
+
+### 6. Start the development server
+
+```bash
+npm run dev
+```
+
+The frontend should now be running at http://localhost:3000.
+
+## Development Workflow
+
+### Backend Development
+
+1. Create custom models in `backend/src/models/`
+2. Create migrations in `backend/src/migrations/`
+3. Implement custom services in `backend/src/services/`
+4. Create API routes in `backend/src/api/routes/`
+5. Set up event subscribers in `backend/src/subscribers/`
+
+### Frontend Development
+
+1. Create React components in `storefront/src/components/`
+2. Set up pages in `storefront/src/pages/`
+3. Implement API client methods in `storefront/src/services/api.js`
+4. Create custom hooks in `storefront/src/hooks/`
+5. Add styling in `storefront/src/styles/`
+
+## Database Migrations
+
+When making changes to the database schema:
+
+1. Create a new migration file in `backend/src/migrations/`
+2. Run the migration:
+
+```bash
+cd backend
+npm run build
+medusa migrations run
+```
+
+## Installing Custom Modules
+
+To install the custom modules we've developed:
+
+1. Copy the model files to `backend/src/models/`
+2. Copy the service files to `backend/src/services/`
+3. Copy the API route files to `backend/src/api/routes/`
+4. Copy the migration files to `backend/src/migrations/`
+5. Run the migrations and rebuild the backend
+
+```bash
+cd backend
+npm run build
+medusa migrations run
+npm run start
+```
+
+## Setting Up Custom Features
+
+### 1. Outfit Builder
+
+1. Copy the `OutfitService` to `backend/src/services/outfit.js`
+2. Copy the `Outfit` entity to `backend/src/models/outfit.js`
+3. Copy the outfit API routes to `backend/src/api/routes/store/outfits/`
+4. Copy the `OutfitBuilder` component to `storefront/src/components/OutfitBuilder.jsx`
+5. Add the API client methods to `storefront/src/services/api.js`
+
+### 2. Virtual Try-On
+
+1. Copy the `VirtualTryOnService` to `backend/src/services/virtual-try-on.js`
+2. Copy the `VirtualTryOn` entity to `backend/src/models/virtual-try-on.js`
+3. Copy the virtual try-on API routes to `backend/src/api/routes/store/virtual-try-on/`
+4. Copy the `VirtualTryOn` component to `storefront/src/components/VirtualTryOn.jsx`
+5. Add the API client methods to `storefront/src/services/api.js`
+
+### 3. Size Recommendation
+
+1. Copy the size recommendation API routes to `backend/src/api/routes/store/size-recommendation/`
+2. Copy the `SizeRecommendation` component to `storefront/src/components/SizeRecommendation.jsx`
+3. Add the API client methods to `storefront/src/services/api.js`
+
+### 4. Style Profile and Quiz
+
+1. Copy the `StyleProfileService` to `backend/src/services/style-profile.js`
+2. Copy the `StyleProfile` entity to `backend/src/models/style-profile.js`
+3. Copy the style profile API routes to `backend/src/api/routes/store/style-profile/`
+4. Copy the `StyleQuiz` component to `storefront/src/components/StyleQuiz.jsx`
+5. Add the API client methods to `storefront/src/services/api.js`
+
+## Styling the Application
+
+We'll use a combination of CSS modules and a utility-first CSS framework for styling the frontend.
+
+### 1. Set up Tailwind CSS (optional)
+
+```bash
+cd storefront
+npm install -D tailwindcss postcss autoprefixer
+npx tailwindcss init -p
+```
+
+Configure Tailwind CSS in `tailwind.config.js`:
+
+```javascript
+module.exports = {
+  content: [
+    "./src/pages/**/*.{js,jsx}",
+    "./src/components/**/*.{js,jsx}",
+  ],
+  theme: {
+    extend: {
+      colors: {
+        'brand-primary': '#4A90E2',
+        'brand-secondary': '#50E3C2',
+        'brand-accent': '#F5A623',
+        'brand-dark': '#2D3142',
+        'brand-light': '#F7F7F9',
+      },
+      fontFamily: {
+        sans: ['Poppins', 'sans-serif'],
+        serif: ['Playfair Display', 'serif'],
+      },
+    },
+  },
+  plugins: [],
+}
+```
+
+### 2. Create global styles
+
+Create `storefront/src/styles/globals.css`:
+
+```css
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Add your custom global styles here */
+body {
+  @apply font-sans text-brand-dark bg-brand-light;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  @apply font-serif;
+}
+
+.btn {
+  @apply inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors;
+}
+
+.btn-primary {
+  @apply bg-brand-primary text-white hover:bg-opacity-90 focus:ring-brand-primary;
+}
+
+.btn-secondary {
+  @apply bg-transparent border-brand-primary text-brand-primary hover:bg-brand-primary hover:text-white focus:ring-brand-primary;
+}
+
+/* Add more custom utility classes here */
+```
+
+## Testing
+
+### Backend Testing
+
+For backend testing, we'll use Jest:
+
+```bash
+cd backend
+npm install --save-dev jest supertest
+```
+
+Create a test setup file at `backend/jest.config.js`.
+
+### Frontend Testing
+
+For frontend testing, we'll use React Testing Library:
+
+```bash
+cd storefront
+npm install --save-dev @testing-library/react @testing-library/jest-dom @testing-library/user-event jest
+```
+
+## Deployment
+
+### Backend Deployment
+
+The Medusa backend can be deployed to various platforms:
+
+- Heroku
+- DigitalOcean
+- AWS
+- Google Cloud
+
+### Frontend Deployment
+
+The Next.js frontend can be deployed to:
+
+- Vercel (recommended)
+- Netlify
+- AWS Amplify

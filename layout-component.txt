@@ -1,0 +1,430 @@
+// Layout Component with Drawer Cart for Casual Chic Boutique 2.0
+
+// storefront/src/components/Layout.jsx
+import React, { useState, useEffect } from 'react';
+import Head from 'next/head';
+import Link from 'next/link';
+import { useRouter } from 'next/router';
+import { useCart } from '../hooks/useCart';
+import { useAuth } from '../hooks/useAuth';
+import DrawerCart from './DrawerCart';
+import MobileMenu from './MobileMenu';
+import Footer from './Footer';
+
+const Layout = ({ children, title = 'Casual Chic Boutique', metaDescription = '', canonicalUrl = '', structuredData = null }) => {
+  const router = useRouter();
+  const { user, logout } = useAuth();
+  const { cart, itemCount } = useCart();
+  
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Default meta description if not provided
+  const defaultMetaDescription = "Discover the perfect blend of comfort and elegance at Casual Chic Boutique. Shop our curated collection of fashion essentials and statement pieces.";
+  
+  // Track scroll position to change header style
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 50);
+    };
+    
+    window.addEventListener('scroll', handleScroll);
+    
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
+  
+  // Close cart and mobile menu when route changes
+  useEffect(() => {
+    const handleRouteChange = () => {
+      setIsCartOpen(false);
+      setIsMobileMenuOpen(false);
+      setIsSearchOpen(false);
+    };
+    
+    router.events.on('routeChangeComplete', handleRouteChange);
+    
+    return () => {
+      router.events.off('routeChangeComplete', handleRouteChange);
+    };
+  }, [router.events]);
+  
+  // Handle search submission
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    
+    if (searchQuery.trim()) {
+      router.push(`/products?q=${encodeURIComponent(searchQuery.trim())}`);
+      setSearchQuery('');
+      setIsSearchOpen(false);
+      
+      // Close mobile menu if open
+      if (isMobileMenuOpen) {
+        setIsMobileMenuOpen(false);
+      }
+    }
+  };
+  
+  // Toggle search
+  const toggleSearch = () => {
+    setIsSearchOpen(!isSearchOpen);
+  };
+  
+  // Toggle cart
+  const toggleCart = () => {
+    setIsCartOpen(!isCartOpen);
+    
+    // Close mobile menu if open
+    if (isMobileMenuOpen) {
+      setIsMobileMenuOpen(false);
+    }
+    
+    // Close search if open
+    if (isSearchOpen) {
+      setIsSearchOpen(false);
+    }
+  };
+  
+  // Toggle mobile menu
+  const toggleMobileMenu = () => {
+    setIsMobileMenuOpen(!isMobileMenuOpen);
+    
+    // Close cart if open
+    if (isCartOpen) {
+      setIsCartOpen(false);
+    }
+    
+    // Close search if open
+    if (isSearchOpen) {
+      setIsSearchOpen(false);
+    }
+  };
+  
+  // Handle logout
+  const handleLogout = () => {
+    logout();
+    router.push('/');
+  };
+  
+  return (
+    <div className="flex flex-col min-h-screen">
+      <Head>
+        <title>{title}</title>
+        <meta charSet="utf-8" />
+        <meta name="viewport" content="initial-scale=1.0, width=device-width" />
+        <meta name="description" content={metaDescription || defaultMetaDescription} />
+        <link rel="icon" href="/favicon.ico" />
+        {canonicalUrl && <link rel="canonical" href={canonicalUrl} />}
+        
+        {/* Open Graph / Social Media Meta Tags */}
+        <meta property="og:title" content={title} />
+        <meta property="og:description" content={metaDescription || defaultMetaDescription} />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content={canonicalUrl || `https://casualchicboutique.com${router.asPath}`} />
+        <meta property="og:image" content="https://casualchicboutique.com/images/og-image.jpg" />
+        <meta property="og:site_name" content="Casual Chic Boutique" />
+        
+        {/* Twitter Card Meta Tags */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={title} />
+        <meta name="twitter:description" content={metaDescription || defaultMetaDescription} />
+        <meta name="twitter:image" content="https://casualchicboutique.com/images/twitter-card.jpg" />
+        
+        {/* Structured Data for SEO */}
+        {structuredData && (
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+          />
+        )}
+      </Head>
+      
+      {/* Announcement Bar */}
+      <div className="bg-brand-accent text-white text-center py-2 text-sm">
+        <div className="container">
+          Free shipping on orders over $100 | Use code WELCOME10 for 10% off your first order
+        </div>
+      </div>
+      
+      {/* Header */}
+      <header className={`header ${isScrolled ? 'scrolled' : ''}`}>
+        <div className="container">
+          <div className="header-content">
+            {/* Mobile Menu Button */}
+            <button
+              className="menu-toggle md:hidden"
+              onClick={toggleMobileMenu}
+              aria-label="Toggle menu"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            
+            {/* Logo */}
+            <div className="logo">
+              <Link href="/">
+                <a className="logo-link">
+                  <img
+                    src="/images/logo.svg"
+                    alt="Casual Chic Boutique"
+                    className="logo-image"
+                    width={150}
+                    height={40}
+                  />
+                </a>
+              </Link>
+            </div>
+            
+            {/* Desktop Navigation */}
+            <nav className="main-nav hidden md:block">
+              <ul className="nav-list">
+                <li className="nav-item dropdown">
+                  <Link href="/products">
+                    <a className={`nav-link ${router.pathname.startsWith('/products') ? 'active' : ''}`}>
+                      Shop
+                    </a>
+                  </Link>
+                  <div className="dropdown-menu mega-menu">
+                    <div className="mega-menu-grid">
+                      <div className="mega-menu-column">
+                        <h3 className="mega-menu-title">Categories</h3>
+                        <ul className="mega-menu-list">
+                          <li><Link href="/categories/dresses"><a>Dresses</a></Link></li>
+                          <li><Link href="/categories/tops"><a>Tops</a></Link></li>
+                          <li><Link href="/categories/bottoms"><a>Bottoms</a></Link></li>
+                          <li><Link href="/categories/outerwear"><a>Outerwear</a></Link></li>
+                          <li><Link href="/categories/accessories"><a>Accessories</a></Link></li>
+                        </ul>
+                      </div>
+                      <div className="mega-menu-column">
+                        <h3 className="mega-menu-title">Collections</h3>
+                        <ul className="mega-menu-list">
+                          <li><Link href="/collections/new-arrivals"><a>New Arrivals</a></Link></li>
+                          <li><Link href="/collections/summer-2025"><a>Summer 2025</a></Link></li>
+                          <li><Link href="/collections/essentials"><a>Essentials</a></Link></li>
+                          <li><Link href="/collections/sustainable"><a>Sustainable</a></Link></li>
+                        </ul>
+                      </div>
+                      <div className="mega-menu-column">
+                        <h3 className="mega-menu-title">Featured</h3>
+                        <div className="mega-menu-featured">
+                          <img 
+                            src="/images/featured-collection.jpg" 
+                            alt="Featured Collection" 
+                            className="rounded"
+                          />
+                          <h4 className="mt-2 font-medium">Summer Essentials</h4>
+                          <p className="text-sm text-gray-500 mb-2">Discover our latest collection</p>
+                          <Link href="/collections/summer-essentials">
+                            <a className="text-sm text-primary">Shop Now →</a>
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </li>
+                <li className="nav-item">
+                  <Link href="/outfit-builder">
+                    <a className={`nav-link ${router.pathname.startsWith('/outfit-builder') ? 'active' : ''}`}>
+                      Outfit Builder
+                    </a>
+                  </Link>
+                </li>
+                <li className="nav-item">
+                  <Link href="/blog">
+                    <a className={`nav-link ${router.pathname.startsWith('/blog') ? 'active' : ''}`}>
+                      Blog
+                    </a>
+                  </Link>
+                </li>
+                <li className="nav-item">
+                  <Link href="/about">
+                    <a className={`nav-link ${router.pathname.startsWith('/about') ? 'active' : ''}`}>
+                      About
+                    </a>
+                  </Link>
+                </li>
+              </ul>
+            </nav>
+            
+            {/* Header Actions */}
+            <div className="header-actions">
+              {/* Search Button (Mobile & Desktop) */}
+              <button
+                className="header-icon search-icon"
+                onClick={toggleSearch}
+                aria-label="Search"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </button>
+              
+              {/* User Menu */}
+              <div className="user-menu">
+                {user ? (
+                  <div className="dropdown">
+                    <button className="header-icon user-icon">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                    </button>
+                    <div className="dropdown-menu">
+                      <div className="dropdown-header">
+                        <p className="font-medium">{user.first_name} {user.last_name}</p>
+                        <p className="text-sm text-gray-500">{user.email}</p>
+                      </div>
+                      <div className="dropdown-content">
+                        <Link href="/account">
+                          <a className="dropdown-item">My Account</a>
+                        </Link>
+                        <Link href="/account/orders">
+                          <a className="dropdown-item">My Orders</a>
+                        </Link>
+                        <Link href="/account/outfits">
+                          <a className="dropdown-item">My Outfits</a>
+                        </Link>
+                        <Link href="/account/wishlist">
+                          <a className="dropdown-item">Wishlist</a>
+                        </Link>
+                        <button
+                          className="dropdown-item text-error"
+                          onClick={handleLogout}
+                        >
+                          Logout
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <Link href="/login">
+                    <a className="header-icon user-icon">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                    </a>
+                  </Link>
+                )}
+              </div>
+              
+              {/* Cart Button */}
+              <button
+                className="header-icon cart-icon"
+                onClick={toggleCart}
+                aria-label="Open cart"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                </svg>
+                
+                {itemCount > 0 && (
+                  <span className="cart-count">{itemCount}</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+      
+      {/* Search Overlay */}
+      {isSearchOpen && (
+        <div className="search-overlay">
+          <div className="container">
+            <div className="search-container">
+              <form className="search-form" onSubmit={handleSearchSubmit}>
+                <input
+                  type="text"
+                  className="search-input"
+                  placeholder="Search for products, categories, or styles..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  autoFocus
+                />
+                <button type="submit" className="search-button">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </button>
+                <button 
+                  type="button" 
+                  className="search-close"
+                  onClick={toggleSearch}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </form>
+              
+              <div className="search-suggestions">
+                <div className="search-section">
+                  <h3 className="search-section-title">Popular Searches</h3>
+                  <div className="search-tags">
+                    <button className="search-tag" onClick={() => router.push('/products?q=summer dress')}>summer dress</button>
+                    <button className="search-tag" onClick={() => router.push('/products?q=linen pants')}>linen pants</button>
+                    <button className="search-tag" onClick={() => router.push('/products?q=silk blouse')}>silk blouse</button>
+                    <button className="search-tag" onClick={() => router.push('/products?q=denim jacket')}>denim jacket</button>
+                    <button className="search-tag" onClick={() => router.push('/products?q=sustainable')}>sustainable</button>
+                  </div>
+                </div>
+                
+                <div className="search-section">
+                  <h3 className="search-section-title">Popular Categories</h3>
+                  <div className="search-categories">
+                    <Link href="/categories/dresses">
+                      <a className="search-category">
+                        <img src="/images/categories/dresses-thumb.jpg" alt="Dresses" className="search-category-image" />
+                        <span className="search-category-name">Dresses</span>
+                      </a>
+                    </Link>
+                    <Link href="/categories/tops">
+                      <a className="search-category">
+                        <img src="/images/categories/tops-thumb.jpg" alt="Tops" className="search-category-image" />
+                        <span className="search-category-name">Tops</span>
+                      </a>
+                    </Link>
+                    <Link href="/categories/bottoms">
+                      <a className="search-category">
+                        <img src="/images/categories/bottoms-thumb.jpg" alt="Bottoms" className="search-category-image" />
+                        <span className="search-category-name">Bottoms</span>
+                      </a>
+                    </Link>
+                    <Link href="/categories/accessories">
+                      <a className="search-category">
+                        <img src="/images/categories/accessories-thumb.jpg" alt="Accessories" className="search-category-image" />
+                        <span className="search-category-name">Accessories</span>
+                      </a>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Mobile Menu */}
+      {isMobileMenuOpen && (
+        <MobileMenu onClose={toggleMobileMenu} />
+      )}
+      
+      {/* Drawer Cart */}
+      <DrawerCart isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
+      
+      {/* Main Content */}
+      <main className="flex-grow">
+        {children}
+      </main>
+      
+      {/* Footer */}
+      <Footer />
+    </div>
+  );
+};
+
+export default Layout;

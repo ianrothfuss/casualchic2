@@ -1,0 +1,220 @@
+/* Drawer Cart Styles for Casual Chic Boutique 2.0 */
+
+/* Add these styles to your main CSS file or create a new one */
+
+/* Drawer Cart Overlay */
+.drawer-cart-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: var(--z-index-modal);
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity var(--transition-normal) var(--transition-timing-ease),
+              visibility var(--transition-normal) var(--transition-timing-ease);
+}
+
+.drawer-cart-overlay.open {
+  visibility: visible;
+  opacity: 1;
+}
+
+/* Drawer Cart */
+.drawer-cart {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 100%;
+  max-width: 425px;
+  height: 100%;
+  background-color: white;
+  box-shadow: var(--shadow-xl);
+  z-index: var(--z-index-modal);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform var(--transition-normal) var(--transition-timing-ease);
+}
+
+.drawer-cart.open {
+  transform: translateX(0);
+}
+
+/* Drawer Cart Header */
+.drawer-cart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-4);
+  border-bottom: 1px solid var(--color-gray-200);
+}
+
+.drawer-cart-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-gray-500);
+  transition: color var(--transition-fast) var(--transition-timing-ease);
+}
+
+.drawer-cart-close:hover {
+  color: var(--color-dark);
+}
+
+/* Drawer Cart Content */
+.drawer-cart-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-4);
+}
+
+/* Cart Items */
+.cart-items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-4);
+}
+
+.cart-item {
+  display: grid;
+  grid-template-columns: 80px 1fr auto;
+  gap: var(--spacing-3);
+  padding-bottom: var(--spacing-4);
+  border-bottom: 1px solid var(--color-gray-200);
+}
+
+.cart-item-image {
+  width: 80px;
+  height: 100px;
+  overflow: hidden;
+  border-radius: var(--border-radius);
+}
+
+.cart-item-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.cart-item-title {
+  font-weight: var(--font-weight-medium);
+  margin-bottom: var(--spacing-1);
+  color: var(--color-dark);
+  text-decoration: none;
+  transition: color var(--transition-fast) var(--transition-timing-ease);
+}
+
+.cart-item-title:hover {
+  color: var(--color-brand-primary);
+}
+
+.cart-item-variant {
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-500);
+  margin-bottom: var(--spacing-2);
+}
+
+.cart-item-price {
+  font-weight: var(--font-weight-medium);
+  margin-bottom: var(--spacing-2);
+}
+
+.cart-item-quantity {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.quantity-btn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-gray-300);
+  border-radius: var(--border-radius);
+  background-color: var(--color-light);
+  cursor: pointer;
+  transition: all var(--transition-fast) var(--transition-timing-ease);
+}
+
+.quantity-btn:hover:not(:disabled) {
+  border-color: var(--color-brand-primary);
+  color: var(--color-brand-primary);
+}
+
+.quantity-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.quantity-value {
+  min-width: 24px;
+  text-align: center;
+}
+
+.cart-item-remove {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: var(--color-gray-400);
+  cursor: pointer;
+  padding: var(--spacing-1);
+  transition: color var(--transition-fast) var(--transition-timing-ease);
+}
+
+.cart-item-remove:hover:not(:disabled) {
+  color: var(--color-error);
+}
+
+.cart-item-remove:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Cart Footer */
+.drawer-cart-footer {
+  padding: var(--spacing-4);
+  border-top: 1px solid var(--color-gray-200);
+  background-color: white;
+}
+
+/* Cart Summary */
+.cart-summary {
+  margin-bottom: var(--spacing-4);
+}
+
+.cart-summary-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-2);
+}
+
+.cart-summary-row.discount {
+  color: var(--color-success);
+}
+
+.cart-summary-row.total {
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-lg);
+  padding-top: var(--spacing-2);
+  border-top: 1px solid var(--color-gray-200);
+}
+
+/* Cart Actions */
+.cart-actions {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Responsive adjustments */
+@media (max-width: 480px) {
+  .drawer-cart {
+    max-width: 100%;
+  }
+}

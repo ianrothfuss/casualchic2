@@ -1,0 +1,26 @@
+{
+  "name": "casual-chic-boutique",
+  "version": "0.1.0",
+  "description": "Casual Chic Boutique 2.0 - Fashion E-commerce Platform",
+  "scripts": {
+    "start": "concurrently \"npm run start:backend\" \"npm run start:storefront\"",
+    "start:backend": "cd backend && npm run start",
+    "start:storefront": "cd storefront && npm run dev",
+    "build": "concurrently \"npm run build:backend\" \"npm run build:storefront\"",
+    "build:backend": "cd backend && npm run build",
+    "build:storefront": "cd storefront && npm run build",
+    "setup": "npm install && npm run setup:backend && npm run setup:storefront",
+    "setup:backend": "cd backend && npm install",
+    "setup:storefront": "cd storefront && npm install",
+    "migrations": "cd backend && npm run migrations",
+    "seed": "cd backend && npm run seed",
+    "test": "concurrently \"npm run test:backend\" \"npm run test:storefront\"",
+    "test:backend": "cd backend && npm test",
+    "test:storefront": "cd storefront && npm test"
+  },
+  "dependencies": {
+    "concurrently": "^7.0.0"
+  },
+  "author": "Casual Chic Team",
+  "license": "MIT"
+}

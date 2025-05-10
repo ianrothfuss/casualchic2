@@ -1,0 +1,1241 @@
+// Enhanced Product Detail Page for Casual Chic Boutique 2.0
+
+// storefront/src/pages/products/[handle].js
+import React, { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/router';
+import Head from 'next/head';
+import Image from 'next/image';
+import { useProduct } from '../../hooks/useProduct';
+import { useRelatedProducts } from '../../hooks/useRelatedProducts';
+import { useCart } from '../../hooks/useCart';
+import { useAuth } from '../../hooks/useAuth';
+import { useSizeRecommendation } from '../../hooks/useSizeRecommendation';
+import { useOutfits } from '../../hooks/useOutfits';
+import Layout from '../../components/Layout';
+import ProductGallery from '../../components/ProductGallery';
+import SizeGuide from '../../components/SizeGuide';
+import VirtualTryOn from '../../components/VirtualTryOn';
+import SizeRecommendation from '../../components/SizeRecommendation';
+import OutfitSuggestions from '../../components/OutfitSuggestions';
+import ProductReviews from '../../components/ProductReviews';
+import RelatedProducts from '../../components/RelatedProducts';
+import Breadcrumbs from '../../components/Breadcrumbs';
+import ColorSwatch from '../../components/ColorSwatch';
+import AccordionTab from '../../components/AccordionTab';
+import Loader from '../../components/Loader';
+import Error from '../../components/Error';
+import RecentlyViewed from '../../components/RecentlyViewed';
+import ShareButtons from '../../components/ShareButtons';
+import WishlistButton from '../../components/WishlistButton';
+
+const ProductDetailPage = () => {
+  const router = useRouter();
+  const { handle } = router.query;
+  const { product, isLoading: productLoading, error: productError } = useProduct(handle);
+  const { user } = useAuth();
+  const { addItem, isLoading: cartLoading } = useCart();
+  
+  const [selectedVariant, setSelectedVariant] = useState(null);
+  const [selectedOptions, setSelectedOptions] = useState({});
+  const [quantity, setQuantity] = useState(1);
+  const [activeTab, setActiveTab] = useState('details');
+  const [addToCartError, setAddToCartError] = useState(null);
+  const [addedToCart, setAddedToCart] = useState(false);
+  const [showSizeGuide, setShowSizeGuide] = useState(false);
+  const [activeImage, setActiveImage] = useState(0);
+  const [isZoomed, setIsZoomed] = useState(false);
+  const [zoomPosition, setZoomPosition] = useState({ x: 0, y: 0 });
+  const imageRef = useRef(null);
+  
+  // Size recommendation
+  const { recommendation, getRecommendation } = useSizeRecommendation();
+  const [showSizeRecommendation, setShowSizeRecommendation] = useState(false);
+  
+  // Related products
+  const { products: relatedProducts, isLoading: relatedLoading } = useRelatedProducts(
+    product?.id, 
+    product?.categories?.[0]?.id,
+    4
+  );
+  
+  // Outfit suggestions
+  const { outfits, createOutfit } = useOutfits();
+  const [outfitSuggestions, setOutfitSuggestions] = useState([]);
+  
+  // Track page view for analytics and recently viewed
+  useEffect(() => {
+    if (product) {
+      // Track page view
+      if (typeof window !== 'undefined' && window.dataLayer) {
+        window.dataLayer.push({
+          event: 'productView',
+          ecommerce: {
+            detail: {
+              products: [{
+                name: product.title,
+                id: product.id,
+                price: selectedVariant?.prices?.[0]?.amount ? (selectedVariant.prices[0].amount / 100).toFixed(2) : '0.00',
+                category: product.categories?.[0]?.name || '',
+                variant: selectedVariant?.title || '',
+              }]
+            }
+          }
+        });
+      }
+      
+      // Add to recently viewed
+      addToRecentlyViewed(product);
+    }
+  }, [product, selectedVariant]);
+  
+  // Reset selected options and variant when product changes
+  useEffect(() => {
+    if (product) {
+      // Initialize selected options with defaults
+      const defaultOptions = {};
+      
+      if (product.options && product.options.length > 0) {
+        product.options.forEach(option => {
+          if (option.values && option.values.length > 0) {
+            defaultOptions[option.id] = option.values[0].value;
+          }
+        });
+      }
+      
+      setSelectedOptions(defaultOptions);
+      
+      // Find default variant
+      if (product.variants && product.variants.length > 0) {
+        setSelectedVariant(product.variants[0]);
+      }
+      
+      // Reset other state
+      setQuantity(1);
+      setAddToCartError(null);
+      setAddedToCart(false);
+      setActiveImage(0);
+      
+      // Reset active tab
+      setActiveTab('details');
+    }
+  }, [product]);
+  
+  // Find matching variant when options change
+  useEffect(() => {
+    if (product && product.variants) {
+      const matchingVariant = findMatchingVariant(product.variants, selectedOptions);
+      setSelectedVariant(matchingVariant || null);
+    }
+  }, [product, selectedOptions]);
+  
+  // Load outfit suggestions when product changes
+  useEffect(() => {
+    if (product) {
+      fetchOutfitSuggestions();
+    }
+  }, [product]);
+  
+  // Add product to recently viewed in localStorage
+  const addToRecentlyViewed = (product) => {
+    if (typeof window === 'undefined') return;
+    
+    try {
+      // Get existing recently viewed items
+      const recentlyViewedString = localStorage.getItem('recentlyViewed');
+      let recentlyViewed = recentlyViewedString ? JSON.parse(recentlyViewedString) : [];
+      
+      // Remove current product if already in the list
+      recentlyViewed = recentlyViewed.filter(item => item.id !== product.id);
+      
+      // Add current product to the beginning
+      recentlyViewed.unshift({
+        id: product.id,
+        handle: product.handle,
+        title: product.title,
+        thumbnail: product.thumbnail || (product.images && product.images.length > 0 ? product.images[0].url : null),
+        price: selectedVariant?.prices?.[0]?.amount ? (selectedVariant.prices[0].amount / 100).toFixed(2) : '0.00',
+        viewedAt: new Date().toISOString()
+      });
+      
+      // Limit to 8 products
+      recentlyViewed = recentlyViewed.slice(0, 8);
+      
+      // Save to localStorage
+      localStorage.setItem('recentlyViewed', JSON.stringify(recentlyViewed));
+    } catch (error) {
+      console.error('Error adding to recently viewed:', error);
+    }
+  };
+  
+  // Helper to find matching variant based on selected options
+  const findMatchingVariant = (variants, options) => {
+    return variants.find(variant => {
+      // Check if all selected options match this variant
+      if (!variant.options) return false;
+      
+      return Object.entries(options).every(([optionId, value]) => {
+        const variantOption = variant.options.find(opt => opt.option_id === optionId);
+        return variantOption && variantOption.value === value;
+      });
+    });
+  };
+  
+  // Fetch outfit suggestions for this product
+  const fetchOutfitSuggestions = async () => {
+    try {
+      // Here we would normally call an API endpoint to get outfit suggestions
+      // For now, we'll just simulate it with some related products
+      if (relatedProducts && relatedProducts.length > 0) {
+        const suggestions = [
+          {
+            id: 'suggestion-1',
+            name: 'Casual Weekend Look',
+            products: [product, ...relatedProducts.slice(0, 2)]
+          },
+          {
+            id: 'suggestion-2',
+            name: 'Evening Out Ensemble',
+            products: [product, ...relatedProducts.slice(1, 3)]
+          }
+        ];
+        
+        setOutfitSuggestions(suggestions);
+      }
+    } catch (error) {
+      console.error('Error fetching outfit suggestions:', error);
+    }
+  };
+  
+  // Handle option change
+  const handleOptionChange = (optionId, value) => {
+    setSelectedOptions(prev => ({
+      ...prev,
+      [optionId]: value
+    }));
+  };
+  
+  // Handle quantity change
+  const handleQuantityChange = (e) => {
+    const value = parseInt(e.target.value);
+    if (!isNaN(value) && value > 0) {
+      setQuantity(value);
+    }
+  };
+  
+  // Increment quantity
+  const incrementQuantity = () => {
+    setQuantity(prev => prev + 1);
+  };
+  
+  // Decrement quantity
+  const decrementQuantity = () => {
+    setQuantity(prev => (prev > 1 ? prev - 1 : 1));
+  };
+  
+  // Add to cart
+  const handleAddToCart = async () => {
+    setAddToCartError(null);
+    setAddedToCart(false);
+    
+    if (!selectedVariant) {
+      setAddToCartError('Please select all options');
+      return;
+    }
+    
+    try {
+      await addItem(selectedVariant.id, quantity);
+      setAddedToCart(true);
+      
+      // Track add to cart event for analytics
+      if (typeof window !== 'undefined' && window.dataLayer) {
+        window.dataLayer.push({
+          event: 'addToCart',
+          ecommerce: {
+            add: {
+              products: [{
+                name: product.title,
+                id: product.id,
+                price: selectedVariant.prices?.[0]?.amount ? (selectedVariant.prices[0].amount / 100).toFixed(2) : '0.00',
+                category: product.categories?.[0]?.name || '',
+                variant: selectedVariant.title || '',
+                quantity: quantity
+              }]
+            }
+          }
+        });
+      }
+      
+      // Reset notification after a few seconds
+      setTimeout(() => {
+        setAddedToCart(false);
+      }, 3000);
+    } catch (error) {
+      setAddToCartError(error.message || 'Error adding item to cart');
+    }
+  };
+  
+  // Get size recommendation
+  const handleGetSizeRecommendation = async (measurements) => {
+    if (!product) return;
+    
+    try {
+      await getRecommendation(product.id, measurements);
+      setShowSizeRecommendation(true);
+    } catch (error) {
+      console.error('Error getting size recommendation:', error);
+    }
+  };
+  
+  // Save outfit
+  const handleSaveOutfit = async (outfitData) => {
+    try {
+      await createOutfit({
+        ...outfitData,
+        products: [...outfitData.products.map(p => ({ id: p.id }))]
+      });
+      
+      // Show success notification or redirect
+    } catch (error) {
+      console.error('Error saving outfit:', error);
+    }
+  };
+  
+  // Handle image zoom
+  const handleMouseMove = (e) => {
+    if (!imageRef.current || !isZoomed) return;
+    
+    const { left, top, width, height } = imageRef.current.getBoundingClientRect();
+    const x = ((e.clientX - left) / width) * 100;
+    const y = ((e.clientY - top) / height) * 100;
+    
+    setZoomPosition({ x, y });
+  };
+  
+  const toggleZoom = () => {
+    setIsZoomed(!isZoomed);
+  };
+  
+  // Loading state
+  if (productLoading) {
+    return (
+      <Layout title="Loading Product... - Casual Chic Boutique">
+        <div className="container py-8">
+          <Loader />
+        </div>
+      </Layout>
+    );
+  }
+  
+  // Error state
+  if (productError || !product) {
+    return (
+      <Layout title="Product Not Found - Casual Chic Boutique">
+        <div className="container py-8">
+          <Error message="Product not found" />
+          <div className="mt-6">
+            <button 
+              className="btn btn-primary"
+              onClick={() => router.push('/products')}
+            >
+              Browse Products
+            </button>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+  
+  // Get product price
+  const getProductPrice = () => {
+    if (selectedVariant && selectedVariant.prices && selectedVariant.prices.length > 0) {
+      const price = selectedVariant.prices[0].amount;
+      return (price / 100).toFixed(2); // Convert cents to dollars
+    }
+    
+    return 'N/A';
+  };
+  
+  // Get product inventory status
+  const getInventoryStatus = () => {
+    if (!selectedVariant) return { status: 'unavailable', text: 'Unavailable' };
+    
+    const inventory = selectedVariant.inventory_quantity || 0;
+    
+    if (inventory <= 0) {
+      return { status: 'out-of-stock', text: 'Out of Stock' };
+    } else if (inventory < 10) {
+      return { status: 'low-stock', text: `Low Stock (${inventory} left)` };
+    } else {
+      return { status: 'in-stock', text: 'In Stock' };
+    }
+  };
+  
+  const inventoryStatus = getInventoryStatus();
+  
+  // Get structured data for SEO
+  const getStructuredData = () => {
+    const offers = {
+      '@type': 'Offer',
+      price: getProductPrice(),
+      priceCurrency: 'USD',
+      availability: inventoryStatus.status === 'in-stock' 
+        ? 'https://schema.org/InStock' 
+        : 'https://schema.org/OutOfStock',
+      url: `https://casualchicboutique.com/products/${product.handle}`
+    };
+    
+    const structuredData = {
+      '@context': 'https://schema.org/',
+      '@type': 'Product',
+      name: product.title,
+      description: product.description.replace(/<[^>]*>/g, ''), // Strip HTML
+      image: product.images && product.images.length > 0 
+        ? product.images.map(img => img.url) 
+        : [],
+      sku: selectedVariant?.sku || '',
+      mpn: selectedVariant?.id || '',
+      brand: {
+        '@type': 'Brand',
+        name: 'Casual Chic Boutique'
+      },
+      offers
+    };
+    
+    // Add review data if available
+    if (product.rating) {
+      structuredData.aggregateRating = {
+        '@type': 'AggregateRating',
+        ratingValue: product.rating,
+        reviewCount: product.review_count || 0
+      };
+    }
+    
+    return structuredData;
+  };
+  
+  return (
+    <Layout 
+      title={`${product.title} - Casual Chic Boutique`}
+      metaDescription={`Shop ${product.title} - ${product.description.replace(/<[^>]*>/g, '').slice(0, 150)}...`}
+      canonicalUrl={`https://casualchicboutique.com/products/${product.handle}`}
+      structuredData={getStructuredData()}
+    >
+      <div className="container py-8">
+        {/* Breadcrumbs */}
+        <Breadcrumbs 
+          items={[
+            { label: 'Home', href: '/' },
+            { label: 'Products', href: '/products' },
+            product.categories && product.categories.length > 0 
+              ? { label: product.categories[0].name, href: `/categories/${product.categories[0].handle}` }
+              : null,
+            { label: product.title, href: null }
+          ].filter(Boolean)}
+          className="mb-6"
+          itemProp="breadcrumb"
+        />
+        
+        <div className="product-content grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+          {/* Product Gallery */}
+          <div className="product-gallery-container">
+            <div 
+              className={`product-gallery-main relative ${isZoomed ? 'zoomed' : ''}`}
+              ref={imageRef}
+              onMouseMove={handleMouseMove}
+              onMouseEnter={() => setIsZoomed(true)}
+              onMouseLeave={() => setIsZoomed(false)}
+              onClick={toggleZoom}
+            >
+              {product.images && product.images.length > 0 ? (
+                <>
+                  <div className="main-image-container relative h-96 md:h-[500px] overflow-hidden rounded-lg">
+                    <Image 
+                      src={product.images[activeImage].url}
+                      alt={product.title}
+                      layout="fill"
+                      objectFit="cover"
+                      className={`main-image transition-opacity ${isZoomed ? 'opacity-0' : 'opacity-100'}`}
+                    />
+                    
+                    {isZoomed && (
+                      <div 
+                        className="zoomed-image"
+                        style={{
+                          backgroundImage: `url(${product.images[activeImage].url})`,
+                          backgroundPosition: `${zoomPosition.x}% ${zoomPosition.y}%`
+                        }}
+                      ></div>
+                    )}
+                  </div>
+                  
+                  {/* Image zoom hint */}
+                  <div className="zoom-hint">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                    </svg>
+                    Hover to zoom
+                  </div>
+                </>
+              ) : (
+                <div className="placeholder-image h-96 md:h-[500px] flex items-center justify-center bg-gray-100 rounded-lg">
+                  <p className="text-gray-500">No image available</p>
+                </div>
+              )}
+            </div>
+            
+            {/* Thumbnails */}
+            {product.images && product.images.length > 1 && (
+              <div className="product-gallery-thumbs grid grid-cols-5 gap-2 mt-4">
+                {product.images.map((image, index) => (
+                  <button
+                    key={index}
+                    className={`thumbnail-button relative h-20 rounded-md overflow-hidden ${activeImage === index ? 'ring-2 ring-primary' : ''}`}
+                    onClick={() => setActiveImage(index)}
+                  >
+                    <Image 
+                      src={image.url}
+                      alt={`${product.title} - Image ${index + 1}`}
+                      layout="fill"
+                      objectFit="cover"
+                      className="thumbnail-image"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
+            
+            {/* Image gallery pagination (mobile) */}
+            {product.images && product.images.length > 1 && (
+              <div className="image-pagination flex justify-center mt-4 md:hidden">
+                {product.images.map((_, index) => (
+                  <button
+                    key={index}
+                    className={`pagination-dot w-2 h-2 rounded-full mx-1 ${activeImage === index ? 'bg-primary' : 'bg-gray-300'}`}
+                    onClick={() => setActiveImage(index)}
+                    aria-label={`View image ${index + 1}`}
+                  ></button>
+                ))}
+              </div>
+            )}
+          </div>
+          
+          {/* Product Details */}
+          <div className="product-details-container">
+            <div className="product-details p-6 rounded-lg shadow">
+              <h1 className="product-details-title text-3xl font-serif mb-2" itemProp="name">{product.title}</h1>
+              
+              {/* Rating */}
+              {product.rating && (
+                <div className="product-rating flex items-center mb-3">
+                  <div className="star-rating" itemProp="aggregateRating" itemScope itemType="https://schema.org/AggregateRating">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <span 
+                        key={i} 
+                        className={`star ${i < Math.floor(product.rating) ? 'filled' : ''} ${i === Math.floor(product.rating) && product.rating % 1 > 0 ? 'half-filled' : ''}`}
+                      >
+                        ★
+                      </span>
+                    ))}
+                    <meta itemProp="ratingValue" content={product.rating} />
+                    <meta itemProp="reviewCount" content={product.review_count || 0} />
+                  </div>
+                  <span className="text-sm text-gray-500 ml-2">
+                    {product.rating.toFixed(1)} ({product.review_count || 0} reviews)
+                  </span>
+                </div>
+              )}
+              
+              {/* Price */}
+              <div className="product-details-price mb-4" itemProp="offers" itemScope itemType="https://schema.org/Offer">
+                <span className="text-2xl font-bold">${getProductPrice()}</span>
+                <meta itemProp="price" content={getProductPrice()} />
+                <meta itemProp="priceCurrency" content="USD" />
+                <link itemProp="availability" href={inventoryStatus.status === 'in-stock' ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock'} />
+                
+                {product.compare_at_price && selectedVariant?.prices?.[0]?.amount < product.compare_at_price && (
+                  <span className="text-gray-500 line-through ml-2">
+                    ${(product.compare_at_price / 100).toFixed(2)}
+                  </span>
+                )}
+              </div>
+              
+              {/* Inventory Status */}
+              <div className={`inventory-status mb-4 ${inventoryStatus.status}`}>
+                {inventoryStatus.text}
+              </div>
+              
+              {/* Product options (color, size, etc.) */}
+              {product.options && product.options.length > 0 && (
+                <div className="product-options mb-6">
+                  {product.options.map(option => {
+                    const isColorOption = option.title.toLowerCase() === 'color';
+                    
+                    return (
+                      <div key={option.id} className="product-option mb-4">
+                        <div className="flex justify-between mb-2">
+                          <label className="product-option-label font-medium">
+                            {option.title}
+                          </label>
+                          
+                          {/* Size guide link for size options */}
+                          {option.title.toLowerCase() === 'size' && (
+                            <button
+                              className="text-sm text-primary hover:underline"
+                              onClick={() => setShowSizeGuide(true)}
+                            >
+                              Size Guide
+                            </button>
+                          )}
+                        </div>
+                        
+                        {/* Color swatches */}
+                        {isColorOption ? (
+                          <div className="color-options flex flex-wrap gap-2">
+                            {option.values.map(value => (
+                              <ColorSwatch
+                                key={value.id}
+                                color={value.value.toLowerCase()}
+                                isSelected={selectedOptions[option.id] === value.value}
+                                onClick={() => handleOptionChange(option.id, value.value)}
+                              />
+                            ))}
+                          </div>
+                        ) : (
+                          /* Other option types (size, material, etc.) */
+                          <div className="product-option-values">
+                            {option.values.map(value => (
+                              <button
+                                key={value.id}
+                                className={`product-option-value ${
+                                  selectedOptions[option.id] === value.value ? 'selected' : ''
+                                }`}
+                                onClick={() => handleOptionChange(option.id, value.value)}
+                              >
+                                {value.value}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              
+              {/* Size Recommendation Button */}
+              {product.metadata?.product_type && ['tops', 'bottoms', 'dresses'].includes(product.metadata.product_type) && (
+                <button 
+                  className="size-recommendation-btn flex items-center mb-6 text-primary hover:underline"
+                  onClick={() => setShowSizeRecommendation(true)}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                  Find Your Perfect Size
+                </button>
+              )}
+              
+              {/* Quantity Selector */}
+              <div className="product-quantity mb-6">
+                <label className="product-option-label mb-2 font-medium">
+                  Quantity
+                </label>
+                
+                <div className="quantity-input flex items-center">
+                  <button 
+                    className="quantity-btn"
+                    onClick={decrementQuantity}
+                    disabled={quantity <= 1}
+                  >
+                    -
+                  </button>
+                  
+                  <input 
+                    type="number" 
+                    min="1" 
+                    value={quantity} 
+                    onChange={handleQuantityChange}
+                    aria-label="Quantity"
+                  />
+                  
+                  <button 
+                    className="quantity-btn"
+                    onClick={incrementQuantity}
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+              
+              {/* Action Buttons */}
+              <div className="product-actions grid grid-cols-1 md:grid-cols-12 gap-3">
+                {/* Add to Cart Button */}
+                <button 
+                  className="btn btn-primary md:col-span-8"
+                  onClick={handleAddToCart}
+                  disabled={cartLoading || inventoryStatus.status === 'out-of-stock'}
+                >
+                  {cartLoading ? 'Adding...' : inventoryStatus.status === 'out-of-stock' ? 'Out of Stock' : 'Add to Cart'}
+                </button>
+                
+                {/* Wishlist Button */}
+                <WishlistButton 
+                  product={product} 
+                  className="btn btn-outline md:col-span-4"
+                />
+              </div>
+              
+              {/* Error or Success Message */}
+              {addToCartError && (
+                <div className="text-error mt-4">
+                  {addToCartError}
+                </div>
+              )}
+              
+              {addedToCart && (
+                <div className="bg-success/10 text-success p-3 rounded mt-4 flex items-center justify-between">
+                  <span>Added to cart successfully!</span>
+                  <button
+                    className="underline text-sm"
+                    onClick={() => setAddedToCart(false)}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
+              
+              {/* Shipping & Returns */}
+              <div className="shipping-returns mt-6 text-sm text-gray-500">
+                <div className="flex items-center mb-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                  </svg>
+                  Free shipping on orders over $100
+                </div>
+                <div className="flex items-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 15v-1a4 4 0 00-4-4H8m0 0l3 3m-3-3l3-3m9 14V5a2 2 0 00-2-2H6a2 2 0 00-2 2v16l4-2 4 2 4-2 4 2z" />
+                  </svg>
+                  30-day easy returns
+                </div>
+              </div>
+              
+              {/* Share Buttons */}
+              <div className="share-buttons-container mt-6">
+                <p className="text-sm font-medium mb-2">Share this product:</p>
+                <ShareButtons
+                  url={`https://casualchicboutique.com/products/${product.handle}`}
+                  title={product.title}
+                  image={product.images && product.images.length > 0 ? product.images[0].url : ''}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {/* Product Information Tabs */}
+        <div className="product-tabs mb-12">
+          <div className="tabs-header flex overflow-x-auto hide-scrollbar">
+            <button 
+              className={`tab ${activeTab === 'details' ? 'active' : ''}`}
+              onClick={() => setActiveTab('details')}
+            >
+              Details
+            </button>
+            <button 
+              className={`tab ${activeTab === 'care' ? 'active' : ''}`}
+              onClick={() => setActiveTab('care')}
+            >
+              Care & Fabric
+            </button>
+            <button 
+              className={`tab ${activeTab === 'sizing' ? 'active' : ''}`}
+              onClick={() => setActiveTab('sizing')}
+            >
+              Size & Fit
+            </button>
+            <button 
+              className={`tab ${activeTab === 'try-on' ? 'active' : ''}`}
+              onClick={() => setActiveTab('try-on')}
+            >
+              Virtual Try-On
+            </button>
+            <button 
+              className={`tab ${activeTab === 'outfits' ? 'active' : ''}`}
+              onClick={() => setActiveTab('outfits')}
+            >
+              Complete the Look
+            </button>
+            <button 
+              className={`tab ${activeTab === 'reviews' ? 'active' : ''}`}
+              onClick={() => setActiveTab('reviews')}
+            >
+              Reviews
+            </button>
+            <button 
+              className={`tab ${activeTab === 'faq' ? 'active' : ''}`}
+              onClick={() => setActiveTab('faq')}
+            >
+              FAQ
+            </button>
+          </div>
+          
+          {/* Tab Content */}
+          <div className="tab-content p-6">
+            {/* Details Tab */}
+            {activeTab === 'details' && (
+              <div className="product-details-tab">
+                <h2 className="text-2xl font-serif mb-4">Product Details</h2>
+                
+                <div 
+                  className="mb-6 product-description"
+                  dangerouslySetInnerHTML={{ __html: product.description }}
+                  itemProp="description"
+                />
+                
+                {/* Product Features */}
+                {product.metadata?.features && (
+                  <div className="product-features mb-6">
+                    <h3 className="text-xl mb-3">Features</h3>
+                    <ul className="list-disc pl-5 space-y-1">
+                      {product.metadata.features.map((feature, index) => (
+                        <li key={index}>{feature}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                
+                {/* Sustainability Rating */}
+                {product.metadata?.sustainability_rating && (
+                  <div className="sustainability-rating mb-6">
+                    <h3 className="text-xl mb-3">Sustainability</h3>
+                    <div className="flex items-center">
+                      <div className="rating-stars">
+                        {Array.from({ length: 5 }).map((_, index) => (
+                          <span 
+                            key={index}
+                            className={`rating-star ${index < product.metadata.sustainability_rating ? 'active' : ''}`}
+                          >
+                            ★
+                          </span>
+                        ))}
+                      </div>
+                      <span className="ml-2">
+                        {getSustainabilityLabel(product.metadata.sustainability_rating)}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-2">
+                      This rating indicates the environmental impact of this product. Learn more about our
+                      <a href="/sustainability" className="text-primary ml-1 hover:underline">
+                        sustainability efforts.
+                      </a>
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Care & Fabric Tab */}
+            {activeTab === 'care' && (
+              <div className="care-tab">
+                <h2 className="text-2xl font-serif mb-4">Care & Fabric</h2>
+                
+                {/* Fabric Composition */}
+                {product.metadata?.fabric_composition && (
+                  <div className="mb-6">
+                    <h3 className="text-xl mb-3">Fabric Composition</h3>
+                    <p>{product.metadata.fabric_composition}</p>
+                    
+                    {/* Fabric Properties */}
+                    {product.metadata?.fabric_properties && (
+                      <div className="fabric-properties mt-4 grid grid-cols-2 md:grid-cols-3 gap-4">
+                        {product.metadata.fabric_properties.map((property, index) => (
+                          <div key={index} className="fabric-property flex items-center">
+                            <span className="fabric-property-icon mr-2">
+                              {getFabricPropertyIcon(property)}
+                            </span>
+                            <span className="fabric-property-name">{property}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {/* Care Instructions */}
+                {product.metadata?.care_instructions && (
+                  <div className="mb-6">
+                    <h3 className="text-xl mb-3">Care Instructions</h3>
+                    <div className="care-instructions grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <div className="care-text">
+                          {typeof product.metadata.care_instructions === 'string' ? (
+                            <p>{product.metadata.care_instructions}</p>
+                          ) : (
+                            <ul className="list-disc pl-5 space-y-1">
+                              {product.metadata.care_instructions.map((instruction, index) => (
+                                <li key={index}>{instruction}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="care-symbols flex flex-wrap gap-4">
+                        {getCareSymbols(product.metadata?.care_symbols || [])}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Product Origin */}
+                {product.metadata?.origin && (
+                  <div className="mb-6">
+                    <h3 className="text-xl mb-3">Product Origin</h3>
+                    <p>Made in {product.metadata.origin}</p>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Size & Fit Tab */}
+            {activeTab === 'sizing' && (
+              <div className="sizing-tab">
+                <h2 className="text-2xl font-serif mb-4">Size & Fit</h2>
+                
+                {product.metadata?.fit_type && (
+                  <p className="mb-6">
+                    This {product.title} is designed with a {product.metadata.fit_type} fit.
+                    {product.metadata?.fit_description && (
+                      <span className="ml-1">{product.metadata.fit_description}</span>
+                    )}
+                  </p>
+                )}
+                
+                {/* Model Information */}
+                {product.metadata?.model_info && (
+                  <div className="model-info mb-6">
+                    <h3 className="text-xl mb-3">Model Information</h3>
+                    <p>{product.metadata.model_info}</p>
+                  </div>
+                )}
+                
+                {/* Size Guide */}
+                <div className="size-guide mb-6">
+                  <h3 className="text-xl mb-3">Size Guide</h3>
+                  <SizeGuide 
+                    productType={product.metadata?.product_type || 'general'}
+                  />
+                </div>
+                
+                {/* Size Recommendation Tool */}
+                <div className="size-recommendation-tool mb-6">
+                  <h3 className="text-xl mb-3">Find Your Perfect Size</h3>
+                  <p className="mb-4">
+                    Enter your measurements to get a personalized size recommendation for this item.
+                  </p>
+                  <button 
+                    className="btn btn-primary"
+                    onClick={() => setShowSizeRecommendation(true)}
+                  >
+                    Get Size Recommendation
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            {/* Virtual Try-On Tab */}
+            {activeTab === 'try-on' && (
+              <div className="try-on-tab">
+                <h2 className="text-2xl font-serif mb-4">Virtual Try-On</h2>
+                
+                <p className="mb-6">
+                  See how this {product.title} looks on you with our virtual try-on technology.
+                  Upload your photo and visualize this garment on your body.
+                </p>
+                
+                <VirtualTryOn product={product} />
+              </div>
+            )}
+            
+            {/* Complete the Look Tab */}
+            {activeTab === 'outfits' && (
+              <div className="outfits-tab">
+                <h2 className="text-2xl font-serif mb-4">Complete the Look</h2>
+                
+                <p className="mb-6">
+                  Style this {product.title} with these suggested items for a complete outfit.
+                </p>
+                
+                <OutfitSuggestions 
+                  product={product}
+                  suggestions={outfitSuggestions}
+                  onSaveOutfit={handleSaveOutfit}
+                />
+              </div>
+            )}
+            
+            {/* Reviews Tab */}
+            {activeTab === 'reviews' && (
+              <div className="reviews-tab">
+                <h2 className="text-2xl font-serif mb-4">Customer Reviews</h2>
+                
+                <ProductReviews productId={product.id} />
+              </div>
+            )}
+            
+            {/* FAQ Tab */}
+            {activeTab === 'faq' && (
+              <div className="faq-tab">
+                <h2 className="text-2xl font-serif mb-4">Frequently Asked Questions</h2>
+                
+                <div className="faq-accordion">
+                  <AccordionTab 
+                    title="What sizes does this product come in?"
+                    content={
+                      <div>
+                        <p>This product is available in the following sizes: {product.options?.find(opt => opt.title.toLowerCase() === 'size')?.values.map(v => v.value).join(', ') || 'Standard sizing'}.</p>
+                        <p className="mt-2">Please refer to our size guide for detailed measurements.</p>
+                      </div>
+                    }
+                  />
+                  
+                  <AccordionTab 
+                    title="How does this product fit?"
+                    content={
+                      <div>
+                        <p>This {product.title} has a {product.metadata?.fit_type || 'standard'} fit. {product.metadata?.fit_description || ''}</p>
+                        <p className="mt-2">For a personalized size recommendation, you can use our Size Recommendation tool.</p>
+                      </div>
+                    }
+                  />
+                  
+                  <AccordionTab 
+                    title="How do I care for this product?"
+                    content={
+                      <div>
+                        {product.metadata?.care_instructions ? (
+                          typeof product.metadata.care_instructions === 'string' ? (
+                            <p>{product.metadata.care_instructions}</p>
+                          ) : (
+                            <ul className="list-disc pl-5 space-y-1">
+                              {product.metadata.care_instructions.map((instruction, index) => (
+                                <li key={index}>{instruction}</li>
+                              ))}
+                            </ul>
+                          )
+                        ) : (
+                          <p>Please refer to the care label on the product for specific care instructions.</p>
+                        )}
+                      </div>
+                    }
+                  />
+                  
+                  <AccordionTab 
+                    title="What is the shipping policy?"
+                    content={
+                      <div>
+                        <p>We offer free standard shipping on all orders over $100. Orders typically process within 1-2 business days.</p>
+                        <p className="mt-2">Standard shipping (3-5 business days): $5.99</p>
+                        <p className="mt-1">Express shipping (1-2 business days): $12.99</p>
+                        <p className="mt-2">For more information, please visit our <a href="/shipping" className="text-primary hover:underline">Shipping Policy</a> page.</p>
+                      </div>
+                    }
+                  />
+                  
+                  <AccordionTab 
+                    title="What is the return policy?"
+                    content={
+                      <div>
+                        <p>We offer a 30-day return policy for all unworn items in original condition with tags attached.</p>
+                        <p className="mt-2">For more information, please visit our <a href="/returns" className="text-primary hover:underline">Returns & Exchanges</a> page.</p>
+                      </div>
+                    }
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+        
+        {/* Recently Viewed */}
+        <RecentlyViewed 
+          currentProductId={product.id}
+          className="mb-12"
+        />
+        
+        {/* Related Products */}
+        <div className="related-products mb-12">
+          <h2 className="text-2xl font-serif mb-6">You May Also Like</h2>
+          
+          <RelatedProducts 
+            products={relatedProducts}
+            isLoading={relatedLoading}
+          />
+        </div>
+        
+        {/* Size Recommendation Modal */}
+        {showSizeRecommendation && (
+          <SizeRecommendation 
+            product={product}
+            onGetRecommendation={handleGetSizeRecommendation}
+            recommendation={recommendation}
+            show={showSizeRecommendation}
+            onClose={() => setShowSizeRecommendation(false)}
+          />
+        )}
+        
+        {/* Size Guide Modal */}
+        {showSizeGuide && (
+          <div className="modal-overlay" onClick={() => setShowSizeGuide(false)}>
+            <div className="modal-content size-guide-modal" onClick={e => e.stopPropagation()}>
+              <button 
+                className="modal-close"
+                onClick={() => setShowSizeGuide(false)}
+              >
+                ×
+              </button>
+              
+              <h2 className="text-2xl font-serif mb-4">Size Guide</h2>
+              
+              <SizeGuide 
+                productType={product.metadata?.product_type || 'general'}
+                expanded={true}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    </Layout>
+  );
+};
+
+// Helper function to get sustainability label
+const getSustainabilityLabel = (rating) => {
+  if (rating >= 5) return 'Excellent';
+  if (rating >= 4) return 'Very Good';
+  if (rating >= 3) return 'Good';
+  if (rating >= 2) return 'Fair';
+  return 'Needs Improvement';
+};
+
+// Helper function to get fabric property icon
+const getFabricPropertyIcon = (property) => {
+  const propertyIcons = {
+    'breathable': (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+      </svg>
+    ),
+    'stretchy': (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+      </svg>
+    ),
+    'moisture-wicking': (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+      </svg>
+    ),
+    'lightweight': (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+      </svg>
+    ),
+  };
+  
+  const propertyLower = property.toLowerCase();
+  return propertyIcons[propertyLower] || (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+    </svg>
+  );
+};
+
+// Helper function to get care symbols
+const getCareSymbols = (symbols) => {
+  const careIcons = {
+    'machine-wash': (
+      <div className="care-symbol-container" title="Machine Wash">
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <circle cx="12" cy="12" r="5" />
+        </svg>
+        <span className="care-symbol-name">Machine Wash</span>
+      </div>
+    ),
+    'hand-wash': (
+      <div className="care-symbol-container" title="Hand Wash">
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M12 8v8M8 12h8" />
+        </svg>
+        <span className="care-symbol-name">Hand Wash</span>
+      </div>
+    ),
+    'do-not-wash': (
+      <div className="care-symbol-container" title="Do Not Wash">
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <circle cx="12" cy="12" r="5" />
+          <line x1="5" y1="5" x2="19" y2="19" />
+        </svg>
+        <span className="care-symbol-name">Do Not Wash</span>
+      </div>
+    ),
+    'dry-clean': (
+      <div className="care-symbol-container" title="Dry Clean Only">
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M9 12h6" />
+        </svg>
+        <span className="care-symbol-name">Dry Clean</span>
+      </div>
+    ),
+    'tumble-dry': (
+      <div className="care-symbol-container" title="Tumble Dry">
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <circle cx="12" cy="12" r="9" />
+          <circle cx="12" cy="12" r="5" />
+        </svg>
+        <span className="care-symbol-name">Tumble Dry</span>
+      </div>
+    ),
+    'do-not-bleach': (
+      <div className="care-symbol-container" title="Do Not Bleach">
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <path d="M5 21L12 3L19 21z" />
+          <line x1="5" y1="21" x2="19" y2="21" />
+          <line x1="5" y1="5" x2="19" y2="19" />
+        </svg>
+        <span className="care-symbol-name">No Bleach</span>
+      </div>
+    ),
+    'iron-low': (
+      <div className="care-symbol-container" title="Iron Low Temperature">
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <path d="M9 6l-6 6v3h18v-3l-6-6h-6z" />
+          <path d="M9 6V4.5a1.5 1.5 0 011.5-1.5h3a1.5 1.5 0 011.5 1.5V6" />
+          <path d="M12 12v3" />
+        </svg>
+        <span className="care-symbol-name">Iron Low</span>
+      </div>
+    ),
+  };
+  
+  return symbols.map((symbol, index) => (
+    <div key={index} className="care-symbol">
+      {careIcons[symbol.toLowerCase()] || (
+        <div className="care-symbol-container" title={symbol}>
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <path d="M12 8v8M8 12h8" />
+          </svg>
+          <span className="care-symbol-name">{symbol}</span>
+        </div>
+      )}
+    </div>
+  ));
+};
+
+export default ProductDetailPage;
