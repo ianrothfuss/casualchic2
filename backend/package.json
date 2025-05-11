@@ -4,7 +4,7 @@
   "description": "Casual Chic Boutique 2.0 Backend",
   "main": "index.js",
   "scripts": {
-    "build": "medusa-dev build",
+    "build": "npx @medusajs/medusa-cli build",
     "start": "medusa develop",
     "seed": "medusa seed -f ./data/seed.json",
     "migrations": "medusa migrations run"
